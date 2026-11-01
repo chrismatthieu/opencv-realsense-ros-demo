@@ -17,8 +17,9 @@ from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import String
 from tf2_ros import TransformBroadcaster
 
-from physical_ai_demo.control import normalize_mode
+from physical_ai_demo.control import compute_command, normalize_mode
 from physical_ai_demo.vision import (
+    draw_command_preview,
     draw_menu_bar,
     make_detector,
     measure_frame,
@@ -129,10 +130,14 @@ class ArucoEye(Node):
         self.root = tk.Tk()
         self.root.title('Demo menu')
         self.root.attributes('-topmost', True)
-        self.root.geometry('480x200+40+40')
+        self.root.geometry('480x300+40+40')
         self.root.configure(bg='#181818')
         self.detect_button = tk.Button(
             self.root, command=lambda: self._queue_mode('report'),
+            font=('sans-serif', 16), fg='white', relief='flat',
+        )
+        self.command_button = tk.Button(
+            self.root, command=lambda: self._queue_mode('preview'),
             font=('sans-serif', 16), fg='white', relief='flat',
         )
         self.follow_button = tk.Button(
@@ -140,9 +145,11 @@ class ArucoEye(Node):
             font=('sans-serif', 16), fg='white', relief='flat',
         )
         self.detect_button.pack(fill='both', expand=True, padx=8, pady=(8, 4))
+        self.command_button.pack(fill='both', expand=True, padx=8, pady=4)
         self.follow_button.pack(fill='both', expand=True, padx=8, pady=(4, 8))
         self.root.bind('1', lambda _event: self._queue_mode('report'))
-        self.root.bind('2', lambda _event: self._queue_mode('follow'))
+        self.root.bind('2', lambda _event: self._queue_mode('preview'))
+        self.root.bind('3', lambda _event: self._queue_mode('follow'))
         self.gui = True
 
     def _queue_mode(self, mode):
@@ -150,11 +157,11 @@ class ArucoEye(Node):
 
     def _on_mode(self, msg):
         mode = normalize_mode(msg.data)
-        if mode in ('report', 'follow', 'approach'):
+        if mode in ('report', 'preview', 'follow', 'approach'):
             self.mode = mode
 
     def _select_mode(self, mode):
-        if mode not in ('report', 'follow') or mode == self.mode:
+        if mode not in ('report', 'preview', 'follow') or mode == self.mode:
             return
         self.mode = mode
         message = String()
@@ -238,6 +245,23 @@ class ArucoEye(Node):
         if self.latest_pose is not None:
             self._publish_pose(msg.header)
 
+        if self.mode == 'preview':
+            linear_x, angular_z, _latched = compute_command(
+                'follow',
+                measured['found'],
+                measured['bearing'],
+                measured['distance_m'],
+                latched=False,
+            )
+            draw_command_preview(
+                annotated,
+                measured.get('u'),
+                measured.get('v'),
+                linear_x,
+                angular_z,
+                measured['bearing'],
+                measured['distance_m'],
+            )
         draw_menu_bar(annotated, self.mode, measured['found'], measured['distance_m'])
         self._pump_menu(measured)
         self.image_pub.publish(bgr_to_ros_image(annotated, msg.header))
@@ -254,8 +278,12 @@ class ArucoEye(Node):
             text=f'1   DETECT\n{distance_text}',
             bg='#2e7d32' if self.mode == 'report' else '#303030',
         )
+        self.command_button.configure(
+            text='2   COMMAND\nshow the twist, do not drive',
+            bg='#2e7d32' if self.mode == 'preview' else '#303030',
+        )
         self.follow_button.configure(
-            text='2   FOLLOW\nrobot turns and drives to 1 m',
+            text='3   FOLLOW\nrobot turns and drives to 1 m',
             bg='#2e7d32' if self.mode == 'follow' else '#303030',
         )
         self.root.update_idletasks()

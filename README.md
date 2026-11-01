@@ -35,10 +35,11 @@ source /home/nvidia/Projects/opencv/install/setup.bash
 ros2 launch physical_ai_demo demo.launch.py
 ```
 
-A window titled **Demo menu** sits on top of the other windows. Click a row, or press 1 or 2 while that window is focused. The same two choices are drawn on the camera picture.
+A window titled **Demo menu** sits on top of the other windows. Click a row, or press 1, 2, or 3 while that window is focused. The same choices are drawn on the camera picture.
 
-1. **DETECT** shows marker 23 and its distance. The robot stays put. This is `report`.
-2. **FOLLOW** publishes `follow`. The robot yaws and drives to stay about one meter away.
+1. **DETECT** shows marker 23 and its distance. The robot stays put.
+2. **COMMAND** draws the image center, an arrow to the marker, and the twist Follow would send: bearing becomes `angular.z`, and distance minus one meter becomes `linear.x`. The robot stays blue and still.
+3. **FOLLOW** sends that same twist. The robot turns green and drives to stay about one meter away.
 
 The distance used for motion is RealSense depth when it agrees with `solvePnP`. A blank page often makes the depth window read the wall behind it; in that case the menu shows the `solvePnP` distance and still prints both numbers.
 

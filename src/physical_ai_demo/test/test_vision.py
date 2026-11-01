@@ -8,8 +8,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from physical_ai_demo.control import compute_command
 from physical_ai_demo.vision import (
     choose_range,
+    draw_command_preview,
     make_detector,
     measure_frame,
     menu_choice_at,
@@ -89,8 +91,18 @@ def test_background_depth_falls_back_to_solvepnp():
 
 
 def test_menu_rows():
-    assert menu_choice_at(20) == 'report'
-    assert menu_choice_at(170) == 'follow'
+    assert menu_choice_at(20, 270) == 'report'
+    assert menu_choice_at(100, 270) == 'preview'
+    assert menu_choice_at(200, 270) == 'follow'
+
+
+def test_command_preview_draws_the_center_line_and_matches_follow():
+    image = np.full((480, 640, 3), 255, np.uint8)
+    linear_x, angular_z, _latched = compute_command('follow', True, 0.5, 2.0, latched=False)
+    draw_command_preview(image, 500, 240, linear_x, angular_z, 0.5, 2.0)
+    assert not np.array_equal(image[:, 320], np.full((480, 3), 255))
+    assert angular_z < 0.0
+    assert linear_x > 0.0
 
 
 def test_ros_image_round_trip_for_color_and_depth():

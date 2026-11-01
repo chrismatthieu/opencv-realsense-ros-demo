@@ -131,6 +131,8 @@ class StageBase(Node):
             return 'HALTED'
         if self.latched:
             return 'STOPPED AT 1 m'
+        if self.mode == 'preview':
+            return 'COMMAND'
         return self.mode.upper()
 
     def _goal_in_map(self):

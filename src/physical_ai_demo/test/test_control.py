@@ -12,7 +12,13 @@ def test_mode_aliases():
     assert normalize_mode(' Follow ') == 'follow'
     assert normalize_mode('STOP') == 'report'
     assert normalize_mode('estop') == 'report'
+    assert normalize_mode('command') == 'preview'
     assert normalize_mode('dance') is None
+
+
+def test_preview_computes_nothing_for_the_motors():
+    linear, angular, latched = compute_command('preview', True, 0.5, 2.0, latched=False)
+    assert (linear, angular, latched) == (0.0, 0.0, False)
 
 
 def test_report_holds_still():

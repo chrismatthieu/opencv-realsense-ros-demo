@@ -40,7 +40,7 @@ class MarkerSkill(Node):
     def _on_mode(self, msg):
         mode = normalize_mode(msg.data)
         if mode is None:
-            self.get_logger().warn('unknown mode %r (use report, follow, or approach)' % msg.data)
+            self.get_logger().warn('unknown mode %r (use report, preview, follow, or approach)' % msg.data)
             return
         if mode != self.mode:
             self.get_logger().info('mode %s -> %s' % (self.mode, mode))

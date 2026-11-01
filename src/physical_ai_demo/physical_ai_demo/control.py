@@ -1,7 +1,8 @@
 """Deterministic marker skill. The agent picks a mode; this picks the velocity."""
 
-MODES = ('report', 'follow', 'approach')
+MODES = ('report', 'preview', 'follow', 'approach')
 _REPORT_ALIASES = ('stop', 'idle', 'estop', 'halt', 'report')
+_PREVIEW_ALIASES = ('preview', 'command')
 
 
 def normalize_mode(text):
@@ -9,6 +10,8 @@ def normalize_mode(text):
     mode = (text or '').strip().lower()
     if mode in _REPORT_ALIASES:
         return 'report'
+    if mode in _PREVIEW_ALIASES:
+        return 'preview'
     if mode in ('follow', 'approach'):
         return mode
     return None

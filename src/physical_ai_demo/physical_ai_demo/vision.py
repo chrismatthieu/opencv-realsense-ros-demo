@@ -102,25 +102,31 @@ def choose_range(depth_m, pnp_z_m):
 
 
 MENU_WIDTH = 640
-MENU_HEIGHT = 180
+MENU_HEIGHT = 270
 
 
 def menu_choice_at(y, height=MENU_HEIGHT):
-    """Top half is detect, bottom half is follow."""
-    return 'report' if y < height / 2.0 else 'follow'
+    """Three rows: detect, command preview, follow."""
+    band = max(1, height) / 3.0
+    if y < band:
+        return 'report'
+    if y < band * 2:
+        return 'preview'
+    return 'follow'
 
 
 def render_menu_panel(mode, found, distance_m):
-    """Clickable two-row menu. Row order matches menu_choice_at."""
+    """Clickable three-row menu. Row order matches menu_choice_at."""
     panel = np.full((MENU_HEIGHT, MENU_WIDTH, 3), 24, np.uint8)
     distance = f'{distance_m:.2f} m' if found and distance_m is not None else 'hold marker 23 up to the camera'
     _menu_row(panel, 0, mode == 'report', '1   DETECT', distance)
-    _menu_row(panel, 1, mode == 'follow', '2   FOLLOW', 'robot turns and drives to 1 m')
+    _menu_row(panel, 1, mode == 'preview', '2   COMMAND', 'show the twist, do not drive')
+    _menu_row(panel, 2, mode == 'follow', '3   FOLLOW', 'robot turns and drives to 1 m')
     return panel
 
 
 def _menu_row(panel, index, active, title, detail):
-    row_h = MENU_HEIGHT // 2
+    row_h = MENU_HEIGHT // 3
     y0 = index * row_h
     color = (40, 110, 60) if active else (48, 48, 48)
     cv2.rectangle(panel, (8, y0 + 8), (MENU_WIDTH - 8, y0 + row_h - 8), color, -1)
@@ -136,21 +142,57 @@ def _menu_row(panel, index, active, title, detail):
 
 
 def draw_menu_bar(image, mode, found, distance_m):
-    """Paint the same two choices along the bottom of the camera view."""
+    """Paint the three choices along the bottom of the camera view."""
     height, width = image.shape[:2]
     bar_h = 64
     y0 = height - bar_h
     cv2.rectangle(image, (0, y0), (width, height), (16, 16, 16), -1)
     distance = f'{distance_m:.2f} m' if found and distance_m is not None else '--'
     rows = (
-        (mode == 'report', f'1 DETECT   {distance}'),
-        (mode == 'follow', '2 FOLLOW'),
+        (mode == 'report', f'1 DETECT  {distance}'),
+        (mode == 'preview', '2 COMMAND'),
+        (mode == 'follow', '3 FOLLOW'),
     )
-    x = 12
-    for active, text in rows:
+    for index, (active, text) in enumerate(rows):
         color = (80, 220, 120) if active else (170, 170, 170)
-        cv2.putText(image, text, (x, y0 + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
-        x += width // 2
+        cv2.putText(
+            image, text, (12 + index * (width // 3), y0 + 40),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA,
+        )
+
+
+def draw_command_preview(image, u, v, linear_x, angular_z, bearing, distance_m):
+    """Draw the twist Follow would send. The robot is not commanded."""
+    height, width = image.shape[:2]
+    center_x = width // 2
+    top = 130
+    bottom = height - 72
+    cv2.line(image, (center_x, top), (center_x, bottom), (80, 220, 255), 2)
+    if u is not None and v is not None:
+        arrow_y = int(np.clip(v, top, bottom))
+        arrow_x = int(np.clip(u, 0, width - 1))
+        cv2.arrowedLine(
+            image, (center_x, arrow_y), (arrow_x, arrow_y), (80, 220, 255), 2, tipLength=0.18,
+        )
+    if bearing is None:
+        lines = ['no marker', 'command would be 0']
+    else:
+        if distance_m is None:
+            range_line = 'range unknown -> linear.x +0.00'
+        else:
+            range_line = f'range {distance_m:.2f} m -> linear.x {linear_x:+.2f}'
+        lines = [
+            f'bearing {bearing:+.2f} -> angular.z {angular_z:+.2f}',
+            range_line,
+            'not sent - robot stays still',
+        ]
+    text_x = 12 if u is None or u >= center_x else center_x + 16
+    y = top + 28
+    for line in lines:
+        (text_w, text_h), _ = cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
+        cv2.rectangle(image, (text_x - 6, y - text_h - 6), (text_x + text_w + 6, y + 8), (0, 0, 0), -1)
+        cv2.putText(image, line, (text_x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 220, 255), 2, cv2.LINE_AA)
+        y += text_h + 16
 
 
 def _median_depth(depth, u, v, radius, scale):
@@ -218,6 +260,8 @@ def measure_frame(
         'rvec': None,
         'tvec': None,
         'center_depth_m': None,
+        'u': None,
+        'v': None,
     }
     empty['center_depth_m'] = center_depth
     if ids is None or len(ids) == 0:
@@ -253,6 +297,8 @@ def measure_frame(
         'id': int(target_id),
         'bearing': bearing,
         'depth_m': depth_m,
+        'u': float(center[0]),
+        'v': float(center[1]),
     })
 
     pose_ok = False
