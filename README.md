@@ -51,9 +51,37 @@ Park the robot back at the origin between takes:
 ros2 service call /demo/reset_pose std_srvs/srv/Empty
 ```
 
+## Act 4 — Synapse mission (surprise)
+
+Acts 1–3 stay on the Demo menu. Act 4 is chat-only: Corebrum Synapse publishes `approach` on `/demo/mode`. The same skill drives to about one meter, holds for five seconds, then hunts for the marker again until you stop it. Do not add a fourth menu button.
+
+Choreography:
+
+1. End **FOLLOW**, click **DETECT** to stop.
+2. Reset the stage robot:
+
+```bash
+ros2 service call /demo/reset_pose std_srvs/srv/Empty
+```
+
+3. Hold marker 23 in frame. Switch to Cursor.
+4. Say: *“Approach marker 23 and stop at one meter.”*
+
+Audience cue: as soon as `/demo/mode` is `approach`, the Demo menu window withdraws entirely and the camera overlay drops its HUD so the stage is Cursor (Synapse) + RViz. RViz goes `APPROACH` (orange), then `STOPPED AT 1 m` (yellow) for five seconds, then hunts again after the marker leaves the frame. The agent should keep printing Synapse `/demo/status` updates in Cursor (`phase`, distance, cycle, resume countdown). Publish `approach` even if the marker is not up yet — waiting for `found` first leaves the three-button menu on screen.
+
+Recovery: ask the agent to stop, Synapse `ros2_estop`, or publish `report` on `/demo/mode` (the Demo menu returns when mode leaves approach).
+
+Rehearsal without the agent:
+
+```bash
+ros2 topic pub --once /demo/mode std_msgs/msg/String "{data: approach}"
+```
+
+Dry run: launch → DETECT → COMMAND → FOLLOW → DETECT → reset → pub `approach` → confirm latch in RViz → DETECT.
+
 ## What the agent is allowed to do
 
-Read `/demo/marker`. Publish `report`, `follow`, or `approach` on `/demo/mode`. The skill owns the control loop. These are the fields in `/demo/marker`:
+Read `/demo/marker`. Publish `report`, `follow`, or `approach` on `/demo/mode`. The skill owns the control loop — never invent a parallel `/cmd_vel` controller for this demo. These are the fields in `/demo/marker`:
 
 | Field | Meaning |
 | --- | --- |

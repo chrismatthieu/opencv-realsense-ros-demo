@@ -5,7 +5,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from physical_ai_demo.control import compute_command, normalize_mode, slew
+from physical_ai_demo.control import (
+    approach_phase,
+    approach_should_resume,
+    compute_command,
+    normalize_mode,
+    slew,
+)
 
 
 def test_mode_aliases():
@@ -66,3 +72,16 @@ def test_latched_approach_ignores_later_motion():
 def test_slew_limits_a_step():
     assert slew(0.0, 1.0, 0.2) == 0.2
     assert slew(0.2, 0.0, 0.2) == 0.0
+
+
+def test_approach_resume_timer():
+    assert approach_should_resume(None) is False
+    assert approach_should_resume(4.9, 5.0) is False
+    assert approach_should_resume(5.0, 5.0) is True
+
+
+def test_approach_phase_labels():
+    assert approach_phase(False, False) == 'waiting_for_marker'
+    assert approach_phase(True, False) == 'approaching'
+    assert approach_phase(True, True) == 'stopped_at_1m'
+    assert approach_phase(True, False, armed=False) == 'cooldown'

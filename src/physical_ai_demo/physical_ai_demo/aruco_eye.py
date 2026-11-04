@@ -79,12 +79,14 @@ class ArucoEye(Node):
         self.color_frame = ''
         self.warned_info = False
         self.mode = 'report'
+        self.latched = False
         self.pending_mode = None
         self.gui = False
 
         self.image_pub = self.create_publisher(Image, '/demo/debug_image', 1)
         self.mode_pub = self.create_publisher(String, '/demo/mode', 10)
         self.create_subscription(String, '/demo/mode', self._on_mode, 10)
+        self.create_subscription(String, '/demo/status', self._on_status, 10)
         self.pose_pub = self.create_publisher(PoseStamped, '/demo/marker_pose', 10)
         self.marker_pub = self.create_publisher(String, '/demo/marker', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -130,7 +132,7 @@ class ArucoEye(Node):
         self.root = tk.Tk()
         self.root.title('Demo menu')
         self.root.attributes('-topmost', True)
-        self.root.geometry('480x300+40+40')
+        self.root.geometry('480x340+40+40')
         self.root.configure(bg='#181818')
         self.detect_button = tk.Button(
             self.root, command=lambda: self._queue_mode('report'),
@@ -144,13 +146,35 @@ class ArucoEye(Node):
             self.root, command=lambda: self._queue_mode('follow'),
             font=('sans-serif', 16), fg='white', relief='flat',
         )
-        self.detect_button.pack(fill='both', expand=True, padx=8, pady=(8, 4))
-        self.command_button.pack(fill='both', expand=True, padx=8, pady=4)
-        self.follow_button.pack(fill='both', expand=True, padx=8, pady=(4, 8))
+        self.mission_label = tk.Label(
+            self.root, text='', font=('sans-serif', 16),
+            fg='#ffdca0', bg='#143c60',
+        )
+        self._menu_visible = True
+        self._show_act_menu()
         self.root.bind('1', lambda _event: self._queue_mode('report'))
         self.root.bind('2', lambda _event: self._queue_mode('preview'))
         self.root.bind('3', lambda _event: self._queue_mode('follow'))
         self.gui = True
+
+    def _show_act_menu(self):
+        self.mission_label.pack_forget()
+        self.detect_button.pack(fill='both', expand=True, padx=8, pady=(8, 4))
+        self.command_button.pack(fill='both', expand=True, padx=8, pady=4)
+        self.follow_button.pack(fill='both', expand=True, padx=8, pady=4)
+        self.root.geometry('480x340+40+40')
+        self.root.deiconify()
+        self.root.attributes('-topmost', True)
+        self._menu_visible = True
+
+    def _hide_menu_for_mission(self):
+        """Act 4: drop the Demo menu so Cursor + RViz own the projector stage."""
+        self.detect_button.pack_forget()
+        self.command_button.pack_forget()
+        self.follow_button.pack_forget()
+        self.mission_label.pack_forget()
+        self.root.withdraw()
+        self._menu_visible = False
 
     def _queue_mode(self, mode):
         self.pending_mode = mode
@@ -159,6 +183,23 @@ class ArucoEye(Node):
         mode = normalize_mode(msg.data)
         if mode in ('report', 'preview', 'follow', 'approach'):
             self.mode = mode
+            if mode != 'approach':
+                self.latched = False
+
+    def _on_status(self, msg):
+        try:
+            status = json.loads(msg.data)
+        except json.JSONDecodeError:
+            return
+        # Stay in lockstep with the skill so Act 4 hides the menu even if the
+        # one-shot /demo/mode publish was easy to miss on a busy GUI thread.
+        mode = normalize_mode(status.get('mode'))
+        if mode in ('report', 'preview', 'follow', 'approach'):
+            self.mode = mode
+            if mode != 'approach':
+                self.latched = False
+        if 'latched' in status:
+            self.latched = bool(status.get('latched'))
 
     def _select_mode(self, mode):
         if mode not in ('report', 'preview', 'follow') or mode == self.mode:
@@ -262,7 +303,13 @@ class ArucoEye(Node):
                 measured['bearing'],
                 measured['distance_m'],
             )
-        draw_menu_bar(annotated, self.mode, measured['found'], measured['distance_m'])
+        draw_menu_bar(
+            annotated,
+            self.mode,
+            measured['found'],
+            measured['distance_m'],
+            latched=self.latched,
+        )
         self._pump_menu(measured)
         self.image_pub.publish(bgr_to_ros_image(annotated, msg.header))
         self._publish_json()
@@ -270,27 +317,33 @@ class ArucoEye(Node):
     def _pump_menu(self, measured):
         if not self.gui:
             return
-        distance = measured['distance_m']
-        distance_text = (
-            f'{distance:.2f} m' if measured['found'] and distance is not None else 'hold up marker 23'
-        )
-        self.detect_button.configure(
-            text=f'1   DETECT\n{distance_text}',
-            bg='#2e7d32' if self.mode == 'report' else '#303030',
-        )
-        self.command_button.configure(
-            text='2   COMMAND\nshow the twist, do not drive',
-            bg='#2e7d32' if self.mode == 'preview' else '#303030',
-        )
-        self.follow_button.configure(
-            text='3   FOLLOW\nrobot turns and drives to 1 m',
-            bg='#2e7d32' if self.mode == 'follow' else '#303030',
-        )
+        if self.mode == 'approach':
+            if self._menu_visible:
+                self._hide_menu_for_mission()
+        else:
+            if not self._menu_visible:
+                self._show_act_menu()
+            distance = measured['distance_m']
+            distance_text = (
+                f'{distance:.2f} m' if measured['found'] and distance is not None else 'hold up marker 23'
+            )
+            self.detect_button.configure(
+                text=f'1   DETECT\n{distance_text}',
+                bg='#2e7d32' if self.mode == 'report' else '#303030',
+            )
+            self.command_button.configure(
+                text='2   COMMAND\nshow the twist, do not drive',
+                bg='#2e7d32' if self.mode == 'preview' else '#303030',
+            )
+            self.follow_button.configure(
+                text='3   FOLLOW\nrobot turns and drives to 1 m',
+                bg='#2e7d32' if self.mode == 'follow' else '#303030',
+            )
         self.root.update_idletasks()
         self.root.update()
         pending = self.pending_mode
         self.pending_mode = None
-        if pending:
+        if pending and self.mode != 'approach':
             self._select_mode(pending)
 
     def _publish_pose(self, header):

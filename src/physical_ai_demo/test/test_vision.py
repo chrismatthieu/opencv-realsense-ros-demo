@@ -10,11 +10,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from physical_ai_demo.control import compute_command
 from physical_ai_demo.vision import (
+    MENU_HEIGHT,
     choose_range,
     draw_command_preview,
+    draw_menu_bar,
     make_detector,
     measure_frame,
     menu_choice_at,
+    mission_status_text,
+    render_menu_panel,
     ros_image_to_array,
 )
 
@@ -94,6 +98,37 @@ def test_menu_rows():
     assert menu_choice_at(20, 270) == 'report'
     assert menu_choice_at(100, 270) == 'preview'
     assert menu_choice_at(200, 270) == 'follow'
+
+
+def test_mission_status_is_approach_only():
+    assert mission_status_text('report') is None
+    assert mission_status_text('preview') is None
+    assert mission_status_text('follow') is None
+    assert mission_status_text('approach') == 'MISSION  approach'
+    assert mission_status_text('approach', found=False) == 'MISSION  waiting for marker 23'
+    assert mission_status_text('approach', latched=True) == 'MISSION  STOPPED AT 1 m'
+    assert mission_status_text('approach', latched=True, found=False) == 'MISSION  STOPPED AT 1 m'
+
+
+def test_approach_hides_menu_ui_entirely():
+    assert render_menu_panel('approach', True, 1.5, latched=False) is None
+    assert render_menu_panel('approach', False, None, latched=False) is None
+    assert render_menu_panel('approach', True, 1.0, latched=True) is None
+
+    report = render_menu_panel('report', True, 1.2)
+    preview = render_menu_panel('preview', True, 1.2)
+    follow = render_menu_panel('follow', True, 1.2)
+    assert report.shape[0] == MENU_HEIGHT
+    assert preview.shape[0] == MENU_HEIGHT
+    assert follow.shape[0] == MENU_HEIGHT
+    assert menu_choice_at(20, MENU_HEIGHT) == 'report'
+    assert menu_choice_at(100, MENU_HEIGHT) == 'preview'
+    assert menu_choice_at(200, MENU_HEIGHT) == 'follow'
+
+    image = np.full((480, 640, 3), 255, np.uint8)
+    draw_menu_bar(image, 'approach', True, 1.5, latched=True)
+    # Act 4 leaves the camera frame clean for RViz (no blue mission strip).
+    assert np.all(image == 255)
 
 
 def test_command_preview_draws_the_center_line_and_matches_follow():

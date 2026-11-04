@@ -86,3 +86,21 @@ def compute_command(
     if arrived:
         return 0.0, 0.0, True
     return linear, angular, False
+
+
+def approach_phase(found, latched, armed=True, resume_in_sec=None):
+    """Audience / agent label for the Act 4 loop."""
+    if latched:
+        return 'stopped_at_1m'
+    if not armed:
+        return 'cooldown'
+    if not found:
+        return 'waiting_for_marker'
+    return 'approaching'
+
+
+def approach_should_resume(latch_age_sec, resume_after_sec=5.0):
+    """True when a latched approach should clear and hunt again."""
+    if latch_age_sec is None:
+        return False
+    return latch_age_sec >= resume_after_sec

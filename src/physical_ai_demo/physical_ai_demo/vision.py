@@ -103,6 +103,7 @@ def choose_range(depth_m, pnp_z_m):
 
 MENU_WIDTH = 640
 MENU_HEIGHT = 270
+MISSION_STRIP_HEIGHT = 48
 
 
 def menu_choice_at(y, height=MENU_HEIGHT):
@@ -115,8 +116,21 @@ def menu_choice_at(y, height=MENU_HEIGHT):
     return 'follow'
 
 
-def render_menu_panel(mode, found, distance_m):
-    """Clickable three-row menu. Row order matches menu_choice_at."""
+def mission_status_text(mode, latched=False, found=True):
+    """Non-interactive Act 4 cue, or None when the agent is not in approach."""
+    if mode != 'approach':
+        return None
+    if latched:
+        return 'MISSION  STOPPED AT 1 m'
+    if not found:
+        return 'MISSION  waiting for marker 23'
+    return 'MISSION  approach'
+
+
+def render_menu_panel(mode, found, distance_m, latched=False):
+    """Acts 1–3: three clickable rows. Act 4: no panel (Cursor + RViz own the stage)."""
+    if mission_status_text(mode, latched=latched, found=found):
+        return None
     panel = np.full((MENU_HEIGHT, MENU_WIDTH, 3), 24, np.uint8)
     distance = f'{distance_m:.2f} m' if found and distance_m is not None else 'hold marker 23 up to the camera'
     _menu_row(panel, 0, mode == 'report', '1   DETECT', distance)
@@ -141,8 +155,10 @@ def _menu_row(panel, index, active, title, detail):
     )
 
 
-def draw_menu_bar(image, mode, found, distance_m):
-    """Paint the three choices along the bottom of the camera view."""
+def draw_menu_bar(image, mode, found, distance_m, latched=False):
+    """Paint Acts 1–3 choices. Act 4 draws nothing — leave the frame clean for RViz."""
+    if mission_status_text(mode, latched=latched, found=found):
+        return
     height, width = image.shape[:2]
     bar_h = 64
     y0 = height - bar_h
@@ -153,10 +169,11 @@ def draw_menu_bar(image, mode, found, distance_m):
         (mode == 'preview', '2 COMMAND'),
         (mode == 'follow', '3 FOLLOW'),
     )
+    text_y = y0 + 40
     for index, (active, text) in enumerate(rows):
         color = (80, 220, 120) if active else (170, 170, 170)
         cv2.putText(
-            image, text, (12 + index * (width // 3), y0 + 40),
+            image, text, (12 + index * (width // 3), text_y),
             cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA,
         )
 

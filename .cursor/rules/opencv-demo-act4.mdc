@@ -1,0 +1,33 @@
+---
+description: Act 4 Synapse approach mission for the OpenCV physical_ai_demo talk
+alwaysApply: true
+---
+
+# OpenCV demo Act 4 — Synapse approach mission
+
+This repo’s live talk has three clickable Demo menu modes (DETECT / COMMAND / FOLLOW) and a chat-only Act 4.
+
+## When the operator asks to approach, run a mission, or stop at one meter
+
+1. Publish mode **immediately** with Synapse `ros2_publish` (do not wait for the marker first — waiting leaves the three-button Acts 1–3 menu on screen):
+   - topic: `/demo/mode`
+   - type: `std_msgs/msg/String`
+   - message: `{ "data": "approach" }`
+2. Keep polling `/demo/status` and **narrate Synapse updates in chat** so Cursor stays lively while RViz shows the robot. Use `phase`, `distance_m`, `cycle`, and `resume_in_sec`:
+   - `waiting_for_marker` — ask the operator to raise marker 23
+   - `approaching` — brief distance/bearing updates (not every tick; every few seconds or on meaningful change)
+   - `stopped_at_1m` — say `STOPPED AT 1 m` and that it will hunt again in ~5 s (`resume_in_sec`)
+   - `cooldown` — marker still in frame after the hold; waiting until it leaves so the next show is a fresh approach
+3. Do **not** end Act 4 on the first latch. The skill loops: latch → 5 s hold → look again. Keep narrating until the operator asks to stop.
+4. Do **not** drive `/cmd_vel` yourself. Do **not** start YOLO find-object, follow-me, or Nav2 for this demo.
+5. Do **not** publish `report` or call `ros2_estop` just because the marker is missing.
+
+## When the operator asks to stop, halt, or cancel
+
+- Publish `{ "data": "report" }` on `/demo/mode`, or call Synapse `ros2_estop`.
+- During approach the Demo menu window is withdrawn and the camera HUD is cleared so Cursor + RViz own the stage; publishing `report` brings the menu back.
+- Do not treat “stop the Acts 1–3 demo / run Act 4” as an estop — switch straight to `approach`.
+
+## Stay in the skill
+
+The agent only chooses the mode. `marker_skill` owns the latching approach loop (including the 5 s resume). Acts 1–3 menu behavior must not be changed mid-talk.
